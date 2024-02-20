@@ -2,9 +2,9 @@
 
 extern int mm_init (void);
 extern void *mm_malloc (size_t size);
-extern void mm_free (void *ptr);
 extern void *mm_realloc(void *ptr, size_t size);
-
+void mm_free (void *ptr);
+static void* find_fit(size_t asize);
 
 /* 
  * Students work in teams of one or two.  Teams enter their team name, 
