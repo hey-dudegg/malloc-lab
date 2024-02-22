@@ -1,3 +1,19 @@
+
+/* 메인 아이디어는 가용 리스트는 맨 앞에 위치할 수록 효율적이라는 점입니다.
+이를 활용하여 가용 리스트가 만들어질 때 마다 연결 리스트의 맨 앞으로 위치를 정해줍니다. */
+
+/*
+
+Team Name: 3211_1st
+Submitted : Dongjun Kim : wbs4808@gmail.com
+Team Crew : SungKyul Choo & Subin Kim 
+Using default tracefiles in ./traces/
+Perf index = 42 (util) + 40 (thru) = 82/100
+명시적 가용 리스트 구현 완료
+findfit은 first fit /ll 순서는 free order로 구현
+
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -8,9 +24,6 @@
 
 #include "mm.h"
 #include "memlib.h"
-
-/* 메인 아이디어는 가용 리스트는 맨 앞에 위치할 수록 효율적이라는 점입니다.
-이를 활용하여 가용 리스트가 만들어질 때 마다 연결 리스트의 맨 앞으로 위치를 정해줍니다. */
 
 /* -----------------------묵시적 가용리스트의 부분 -----------------------*/
 #define WSIZE 4             /* 워드 & 헤드 풋터 사이즈 (bytes) */
