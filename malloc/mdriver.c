@@ -221,10 +221,10 @@ int main(int argc, char **argv)
 	    printf("ERROR.  You must fill in all or none of the team member 2 ID fields!\n");
 	    exit(1);
 	}
-	else if (*team.name2 != '\0')
-	    printf("Team Crew :%s &%s\n", team.name2, team.id2);
+	else if (*team.name2 != '\0'){
+	    printf("Team Crew :%s&%s\n", team.name2, team.id2);
+	}
     }
-
     /* 
      * If no -f command line arg, then use the entire set of tracefiles 
      * defined in default_traces[]
@@ -234,10 +234,8 @@ int main(int argc, char **argv)
         num_tracefiles = sizeof(default_tracefiles) / sizeof(char *) - 1;
 	printf("Using default tracefiles in %s\n", tracedir);
     }
-
     /* Initialize the timing package */
     init_fsecs();
-
     /*
      * Optionally run and evaluate the libc malloc package 
      */

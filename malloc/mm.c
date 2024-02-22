@@ -9,12 +9,15 @@
 #include "mm.h"
 #include "memlib.h"
 
-// 묵시적 가용리스트의 부분입니다.
-#define WSIZE 4                 /* 워드 & 헤드 풋터 사이즈 (bytes) */
-#define DSIZE 8                 /* 더블 워드 사이즈 (Bytes) */
-#define CHUNKSIZE (1 << 12)     /* 힙 확장하는 사이즈 (bytes) */
+/* 메인 아이디어는 가용 리스트는 맨 앞에 위치할 수록 효율적이라는 점입니다.
+이를 활용하여 가용 리스트가 만들어질 때 마다 연결 리스트의 맨 앞으로 위치를 정해줍니다. */
 
-#define MAX(x, y) ((x) > (y) ? (x) : (y))   // 크기 비교하는 함수
+/* -----------------------묵시적 가용리스트의 부분 -----------------------*/
+#define WSIZE 4             /* 워드 & 헤드 풋터 사이즈 (bytes) */
+#define DSIZE 8             /* 더블 워드 사이즈 (Bytes) */
+#define CHUNKSIZE (1 << 12) /* 힙 확장하는 사이즈 (bytes) */
+
+#define MAX(x, y) ((x) > (y) ? (x) : (y)) // 크기 비교하는 함수
 #define PACK(size, alloc) ((size) | (alloc))
 
 #define GET(p) (*(unsigned int *)(p))
@@ -33,43 +36,31 @@ static void place(void *bp, size_t asize);
 static void *extend_heap(size_t words);
 static void *coalesce(void *bp);
 static void *find_fit(size_t asize);
-// heap 출발을 가르키는 포인터
-// static char *heap_listp = 0;
+// static char *heap_listp = 0;  // heap 출발을 가르키는 포인터
 
-// 명시적 가용리스트에서 추가되는 부분입니다.
+/* -----------------------명시적 가용리스트의 부분 -----------------------*/
 // 이전(PREV) 가용리스트의 bp 주소를 변경하기 위한 함수 == *(GET(PREV_FREEP(bp)))
 #define PREV_FREEP(bp) (*(void **)(bp))
 // 다음(NEXT) 가용리스트의 bp 주소를 변경하기 위한 함수 == *(GET(NEXT_FREEP(bp)))
 #define NEXT_FREEP(bp) (*(void **)(bp + WSIZE))
 
-// 해당 가용 리스트의 링크드 리스트 내 앞,뒤 연결을 끊는 매크로 함수
-void un_connect(void *bp);
-// 해당 가용 리스트의 링크드 리스트 내 앞, 뒤를 연결해주는 함수
-void connect(void *bp);
-static char *heap_listp = NULL;
-// 가용리스트의 첫번째 블록을 가리키는 포인터
-static char *free_listp = NULL; 
+void un_connect(void *bp);      // 가용 링크드 리스트 내 앞,뒤 연결을 끊는 매크로 함수
+void connect(void *bp);         // 가용 링크드 리스트 내 앞,뒤를 연결해주는 함수
+static char *heap_listp = NULL; // heap 출발을 가르키는 포인터
+static char *free_listp = NULL; // 가용리스트의 첫번째(맨 앞) 블록을 가리키는 포인터
 
 team_t team = {
-    /* Team name */
-    " 3211_1st",
-    /* First member's full name */
-    " Dongjun Kim ",
-    /* First member's email address */
-    " wbs4808@gmail.com",
-    /* Second member's full name (leave blank if none) */
-    " SungKyul Choo ",
-    /* Second member's email address (leave blank if none) */
-    " Subin Kim "};
+    " 3211_1st",          /* Team name */
+    " Dongjun Kim ",      /* First member's full name */
+    " wbs4808@gmail.com", /* First member's email address */
+    " SungKyul Choo ",    /* Second member's full name (leave blank if none) */
+    " Subin Kim ", };       /* Second member's email address (leave blank if none) */
 
-/* 최소 할당 크기, DSIZE */
-#define ALIGNMENT 8
-
-/* 가장 근접한 최소 할당 크기를 반환해주는 매크로 함수 */
-#define ALIGN(size) (((size) + (ALIGNMENT - 1)) & ~0x7)
+#define ALIGNMENT 8                                     /* 최소 할당 크기, DSIZE */
+#define ALIGN(size) (((size) + (ALIGNMENT - 1)) & ~0x7) /* 가장 근접한 최소 할당 크기를 반환해주는 매크로 함수 */
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
 
-// malloc 함수의 초기 설정 함수
+// malloc 초기 설정 함수
 int mm_init(void)
 {
     if ((heap_listp = mem_sbrk(24)) == (void *)-1)
@@ -87,8 +78,7 @@ int mm_init(void)
     free_listp = heap_listp + DSIZE; // free_listp 초기화
     // 가용리스트에 블록이 추가될 때 마다 항상 리스트의 제일 앞에 추가될 것이므로
     // 지금 생성한 프롤로그 블록은 항상 가용리스트의 끝에 위치하게 된다.
-
-    if (extend_heap(CHUNKSIZE / DSIZE) == NULL)
+    if (extend_heap(CHUNKSIZE / WSIZE) == NULL)
     {
         return -1;
     }
@@ -105,8 +95,10 @@ void *mm_malloc(size_t size)
     size_t extend_size;
     size_t asize;
 
-    if (size == 0)
+    if (size == 0){
         return NULL;
+    }
+        
 
     if (size <= DSIZE)
     {
@@ -121,14 +113,16 @@ void *mm_malloc(size_t size)
     {
         place(bp, asize);
         return bp;
-
-        extend_size = MAX(asize, CHUNKSIZE);
-        bp = extend_heap(extend_size / DSIZE);
-        if (bp == NULL)
-            return NULL;
-        place(bp, asize);
-        return bp;
     }
+
+    extend_size = MAX(asize, CHUNKSIZE);
+    bp = extend_heap(extend_size / WSIZE);
+
+    if (bp == NULL)
+        return NULL;
+    place(bp, asize);
+    return bp;
+    
 }
 
 static void *coalesce(void *bp)
@@ -136,22 +130,25 @@ static void *coalesce(void *bp)
     size_t prev_alloc = GET_ALLOC(HDRP(PREV_BLKP(bp)));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
-    
-    //이미 가용리스트에 존재하던 블록은 연결하기 이전에 가용리스트에서 제거해준다.
-    if (prev_alloc && !next_alloc){
+
+    // 이미 가용리스트에 존재하던 블록은 연결하기 이전에 가용리스트에서 제거해준다.
+    if (prev_alloc && !next_alloc)
+    {
         un_connect(NEXT_BLKP(bp));
         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
         PUT(HDRP(bp), PACK(size, 0));
         PUT(FTRP(bp), PACK(size, 0));
     }
-    else if (!prev_alloc && next_alloc){
+    else if (!prev_alloc && next_alloc)
+    {
         un_connect(PREV_BLKP(bp));
         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
         bp = PREV_BLKP(bp);
         PUT(HDRP(bp), PACK(size, 0));
         PUT(FTRP(bp), PACK(size, 0));
     }
-    else if (!prev_alloc && !next_alloc){
+    else if (!prev_alloc && !next_alloc)
+    {
         un_connect(PREV_BLKP(bp));
         un_connect(NEXT_BLKP(bp));
         size += GET_SIZE(HDRP(NEXT_BLKP(bp))) + GET_SIZE(HDRP(PREV_BLKP(bp)));
@@ -159,9 +156,9 @@ static void *coalesce(void *bp)
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
     }
-    //연결된 블록을 가용리스트에 추가
+    // 연결된 블록을 가용리스트에 추가
     connect(bp);
-	return bp;
+    return bp;
 }
 /*
 static void *coalesce(void *bp)
@@ -215,7 +212,7 @@ void mm_free(void *bp)
     coalesce(bp);
 }
 
-/* 
+/*
 void *mm_realloc(void *oldptr, size_t size)
 {
     void *newptr;
@@ -244,23 +241,28 @@ void *mm_realloc(void *oldptr, size_t size)
  */
 // 할당된 블록의 크기를 변경한다
 
-void *mm_realloc(void *bp, size_t size){
-    if(size <= 0){ 
+void *mm_realloc(void *bp, size_t size)
+{
+    if (size <= 0)
+    {
         mm_free(bp);
         return 0;
     }
-    if(bp == NULL){
-        return mm_malloc(size); 
+    if (bp == NULL)
+    {
+        return mm_malloc(size);
     }
-    void *newp = mm_malloc(size); 
-    if(newp == NULL){
+    void *newp = mm_malloc(size);
+    if (newp == NULL)
+    {
         return 0;
     }
     size_t oldsize = GET_SIZE(HDRP(bp));
-    if(size < oldsize){
-    	oldsize = size; 
-	}
-    memcpy(newp, bp, oldsize); 
+    if (size < oldsize)
+    {
+        oldsize = size;
+    }
+    memcpy(newp, bp, oldsize);
     mm_free(bp);
     return newp;
 }
@@ -269,7 +271,7 @@ static void *extend_heap(size_t words)
 {
     size_t size;
     char *bp;
-    size = words * DSIZE; // 물어보기
+    size = words * WSIZE; // 물어보기
     if ((bp = mem_sbrk(size)) == (void *)-1)
         return NULL;
 
@@ -282,17 +284,19 @@ static void *extend_heap(size_t words)
 static void *find_fit(size_t asize)
 {
     // first fit
-    void * bp;
+    void *bp;
     bp = free_listp;
-    //가용리스트 내부의 유일한 할당 블록은 맨 뒤의 프롤로그 블록이므로 할당 블록을 만나면 for문을 종료한다.
-    for (bp; GET_ALLOC(HDRP(bp)) != 1; bp = NEXT_FREEP(bp)){
-        if (GET_SIZE(HDRP(bp)) >= asize){
+    // 가용리스트 내부의 유일한 할당 블록은 맨 뒤의 프롤로그 블록이므로 할당 블록을 만나면 for문을 종료한다.
+    for (bp; GET_ALLOC(HDRP(bp)) != 1; bp = NEXT_FREEP(bp))
+    {
+        if (GET_SIZE(HDRP(bp)) >= asize)
+        {
             return bp;
         }
     }
     return NULL;
 }
-/* 
+/*
 static void *find_fit(size_t asize)
 {
     char *bp;
@@ -310,8 +314,7 @@ static void *find_fit(size_t asize)
 
 static void place(void *bp, size_t asize)
 {
-    size_t csize;
-    csize = GET_SIZE(HDRP(bp));
+    size_t csize = GET_SIZE(HDRP(bp));
     // 할당될 블록이니 가용리스트 내부에서 제거해준다.
     un_connect(bp);
     if (csize - asize >= 16)
@@ -331,25 +334,26 @@ static void place(void *bp, size_t asize)
     }
 }
 
-// 새로 반환되거나 생성된 가용 블록을 가용리스트 맨 앞에 추가한다.
+// 새로 반환되거나 생성된 가용 블록을 가용리스트 맨 앞에 위치시키는 함수
 void connect(void *bp)
 {
-    NEXT_FREEP(bp) = free_listp; // 현재 블럭의 SUC으로 이전 프리_리스트p의 값을 
-    PREV_FREEP(bp) = NULL;       // 
+    NEXT_FREEP(bp) = free_listp; // 현재 블럭의 NEXT 주소를 이전 f_p 값으로 저장
+    PREV_FREEP(bp) = NULL;       // 맨 앞이므로 이전 블럭의 주소를 NULL;
     PREV_FREEP(free_listp) = bp;
     free_listp = bp;
 }
 
-// 항상 가용리스트 맨 뒤에 프롤로그 블록이 존재하고 있기 때문에 조건을 간소화할 수 있다.
+// 해당 블록의 연결을 끊고 앞, 뒤의 블록들을 연결시키는 함수
 void un_connect(void *bp)
 {
     // 첫번째 블럭을 없앨 때
     if (bp == free_listp)
     {
+        // 다음에 있는 블럭의 이전 블럭 포인터만 NULL처리하면 된다.
         PREV_FREEP(NEXT_FREEP(bp)) = NULL;
         free_listp = NEXT_FREEP(bp);
-        // 앞 뒤 모두 있을 때
     }
+    // 앞 뒤 모두 있을 때
     else
     {
         NEXT_FREEP(PREV_FREEP(bp)) = NEXT_FREEP(bp);
